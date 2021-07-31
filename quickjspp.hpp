@@ -1294,6 +1294,7 @@ public:
             qjs::Value prototype;
             qjs::Context::Module& module;
             qjs::Context& context;
+            JSClassID baseClassId = 0;
         public:
             explicit class_registrar(const char * name, qjs::Context::Module& module, qjs::Context& context) :
                     name(name),
@@ -1356,23 +1357,33 @@ public:
                 return *this;
             }
 
-            /* TODO: needs casting to base class
+            // TODO: needs casting to base class
             template <class B>
             class_registrar& base()
             {
                 assert(js_traits<std::shared_ptr<B>>::QJSClassId && "base class is not registered");
-                auto base_proto = JS_GetClassProto(context.ctx, js_traits<std::shared_ptr<B>>::QJSClassId);
+                baseClassId = js_traits<std::shared_ptr<B>>::QJSClassId;
+                auto base_proto = JS_GetClassProto(context.ctx, baseClassId);
+
+                prototype = Value{context.ctx, JS_NewObjectClass(context.ctx, baseClassId)};
+
                 int err = JS_SetPrototype(context.ctx, prototype.v, base_proto);
                 JS_FreeValue(context.ctx, base_proto);
                 if(err < 0)
                     throw exception{};
                 return *this;
             }
-             */
+
 
             ~class_registrar()
             {
-                context.registerClass<T>(name, std::move(prototype));
+                // JSValue baseObj = JS_NULL;
+                // if (baseClassId != 0) {
+                //   baseObj = JS_NewObjectClass(context.ctx, baseClassId);
+                //   context.registerClass<T>(name, std::move(baseObj)); // this will lose all the stuff added in prototype obj
+                // } else {
+                  context.registerClass<T>(name, std::move(prototype));
+                // }
             }
         };
 
