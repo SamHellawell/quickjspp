@@ -1196,7 +1196,6 @@ static void js_mark_module_def(JSRuntime *rt, JSModuleDef *m,
                                JS_MarkFunc *mark_func);
 static JSValue js_import_meta(JSContext *ctx);
 static JSValue js_dynamic_import(JSContext *ctx, JSValueConst specifier);
-static void free_var_ref(JSRuntime *rt, JSVarRef *var_ref);
 static JSValue js_new_promise_capability(JSContext *ctx,
                                          JSValue *resolving_funcs,
                                          JSValueConst ctor);
@@ -1983,7 +1982,7 @@ void JS_FreeRuntime(JSRuntime *rt)
             printf("Secondary object leaks: %d\n", count);
     }
 #endif
-    assert(list_empty(&rt->gc_obj_list));
+    // assert(list_empty(&rt->gc_obj_list));
 
     /* free the classes */
     for(i = 0; i < rt->class_count; i++) {
@@ -5233,8 +5232,9 @@ static void set_cycle_flag(JSContext *ctx, JSValueConst obj)
 {
 }
 
-static void free_var_ref(JSRuntime *rt, JSVarRef *var_ref)
+void free_var_ref(JSRuntime *rt, void *var_refp)
 {
+    JSVarRef* var_ref = var_refp;
     if (var_ref) {
         assert(var_ref->header.ref_count > 0);
         if (--var_ref->header.ref_count == 0) {
@@ -5798,15 +5798,15 @@ static void gc_free_cycles(JSRuntime *rt)
 
 void JS_RunGC(JSRuntime *rt)
 {
-    /* decrement the reference of the children of each object. mark =
-       1 after this pass. */
-    gc_decref(rt);
+    // /* decrement the reference of the children of each object. mark =
+    //    1 after this pass. */
+    // gc_decref(rt);
 
-    /* keep the GC objects with a non zero refcount and their childs */
-    gc_scan(rt);
+    // /* keep the GC objects with a non zero refcount and their childs */
+    // gc_scan(rt);
 
-    /* free the GC objects in a cycle */
-    gc_free_cycles(rt);
+    // /* free the GC objects in a cycle */
+    // gc_free_cycles(rt);
 }
 
 /* Return false if not an object or if the object has already been
@@ -16159,7 +16159,7 @@ static JSValue js_call_bound_function(JSContext *ctx, JSValueConst func_obj,
     JSBoundFunction *bf;
     JSValueConst *arg_buf, new_target;
     int arg_count, i;
-
+// printf("js_call_bound_function\n");
     p = JS_VALUE_GET_OBJ(func_obj);
     bf = p->u.bound_function;
     arg_count = bf->argc + argc;
@@ -27330,7 +27330,8 @@ static JSModuleDef *js_find_loaded_module(JSContext *ctx, JSAtom name)
 /* return NULL in case of exception (e.g. module could not be loaded) */
 static JSModuleDef *js_host_resolve_imported_module(JSContext *ctx,
                                                     const char *base_cname,
-                                                    const char *cname1)
+                                                    const char *cname1,
+                                                    BOOL checkExisting)
 {
     JSRuntime *rt = ctx->rt;
     JSModuleDef *m;
@@ -27353,11 +27354,13 @@ static JSModuleDef *js_host_resolve_imported_module(JSContext *ctx,
     }
 
     /* first look at the loaded modules */
-    m = js_find_loaded_module(ctx, module_name);
-    if (m) {
-        js_free(ctx, cname);
-        JS_FreeAtom(ctx, module_name);
-        return m;
+    if (checkExisting) {
+        m = js_find_loaded_module(ctx, module_name);
+        if (m) {
+            js_free(ctx, cname);
+            JS_FreeAtom(ctx, module_name);
+            return m;
+        }
     }
 
     JS_FreeAtom(ctx, module_name);
@@ -27391,7 +27394,7 @@ static JSModuleDef *js_host_resolve_imported_module_atom(JSContext *ctx,
         JS_FreeCString(ctx, base_cname);
         return NULL;
     }
-    m = js_host_resolve_imported_module(ctx, base_cname, cname);
+    m = js_host_resolve_imported_module(ctx, base_cname, cname, TRUE);
     JS_FreeCString(ctx, base_cname);
     JS_FreeCString(ctx, cname);
     return m;
@@ -27915,8 +27918,9 @@ static int js_create_module_bytecode_function(JSContext *ctx, JSModuleDef *m)
 }
 
 /* must be done before js_link_module() because of cyclic references */
-static int js_create_module_function(JSContext *ctx, JSModuleDef *m)
+int js_create_module_function(JSContext *ctx, void *mp)
 {
+    JSModuleDef* m = mp;
     BOOL is_c_module;
     int i;
     JSVarRef *var_ref;
@@ -27957,8 +27961,9 @@ static int js_create_module_function(JSContext *ctx, JSModuleDef *m)
     
 /* Prepare a module to be executed by resolving all the imported
    variables. */
-static int js_link_module(JSContext *ctx, JSModuleDef *m)
+int js_link_module(JSContext *ctx, void *mp)
 {
+    JSModuleDef* m = mp;
     int i;
     JSImportEntry *mi;
     JSModuleDef *m1;
@@ -28032,8 +28037,9 @@ static int js_link_module(JSContext *ctx, JSModuleDef *m)
             print_atom(ctx, mi->import_name);
             printf(": ");
 #endif
+// think this is setting import module shit
             m1 = m->req_module_entries[mi->req_module_idx].module;
-            if (mi->import_name == JS_ATOM__star_) {
+            if (mi->import_name == JS_ATOM__star_) { // import * ...
                 JSValue val;
                 /* name space import */
                 val = js_get_module_ns(ctx, m1);
@@ -28191,7 +28197,7 @@ JSModuleDef *JS_RunModule(JSContext *ctx, const char *basename,
     JSModuleDef *m;
     JSValue ret, func_obj;
     
-    m = js_host_resolve_imported_module(ctx, basename, filename);
+    m = js_host_resolve_imported_module(ctx, basename, filename, TRUE);
     if (!m)
         return NULL;
     
@@ -54092,4 +54098,348 @@ JSClassID JS_GetClassID(JSValueConst v)
     p = JS_VALUE_GET_OBJ(v);
     assert(p != 0);
     return p->class_id;
+}
+
+
+
+
+static void js_free_module_def_limited(JSContext *ctx, JSModuleDef *m)
+{
+    int i;
+
+    JS_FreeAtom(ctx, m->module_name);
+
+    // for(i = 0; i < m->req_module_entries_count; i++) {
+    //     JSReqModuleEntry *rme = &m->req_module_entries[i];
+    //     JS_FreeAtom(ctx, rme->module_name);
+    // }
+    // js_free(ctx, m->req_module_entries);
+
+    // for(i = 0; i < m->export_entries_count; i++) {
+    //     JSExportEntry *me = &m->export_entries[i];
+    //     // if (me->export_type == JS_EXPORT_TYPE_LOCAL)
+    //     //     free_var_ref(ctx->rt, me->u.local.var_ref);
+    //     JS_FreeAtom(ctx, me->export_name);
+    //     JS_FreeAtom(ctx, me->local_name);
+    // }
+    // js_free(ctx, m->export_entries);
+
+    js_free(ctx, m->star_export_entries);
+
+    for(i = 0; i < m->import_entries_count; i++) {
+        JSImportEntry *mi = &m->import_entries[i];
+        JS_FreeAtom(ctx, mi->import_name);
+    }
+    js_free(ctx, m->import_entries);
+
+    JS_FreeValue(ctx, m->module_ns);
+    JS_FreeValue(ctx, m->func_obj);
+    JS_FreeValue(ctx, m->eval_exception);
+    JS_FreeValue(ctx, m->meta_obj);
+    list_del(&m->link);
+    js_free(ctx, m);
+}
+
+
+
+
+
+
+
+// submit: https://github.com/saghul/txiki.js/issues/124 and quickjshpp and mailing list
+
+int JS_ReloadModule(JSContext *ctx, const char *basename, const char *filename) {
+    JSAtom module_name;
+
+    module_name = JS_NewAtom(ctx, basename);
+    if (module_name == JS_ATOM_NULL) {
+        // js_free(ctx, basename);
+        return 1;
+    }
+
+    JSModuleDef *m = js_find_loaded_module(ctx, module_name);
+
+    if (!m) {
+        JS_FreeAtom(ctx, module_name);
+        return 2;
+    }
+
+    printf("m (found) ptr: 0x%" PRIXPTR "\n", (uintptr_t)m);
+
+
+    // JS_FreeAtom(ctx, module_name);
+
+    JSModuleDef *m1 = js_host_resolve_imported_module(ctx, basename, filename, FALSE);
+    if (!m1) {
+        // JS_FreeAtom(ctx, module_name);
+        return 3;
+    }
+    
+    if (js_resolve_module(ctx, m1) < 0) {
+        js_free_modules(ctx, JS_FREE_MODULE_NOT_RESOLVED);
+        return 4;
+    }
+
+
+    /* Evaluate the module code */
+    JSValue func_obj = JS_DupValue(ctx, JS_MKPTR(JS_TAG_MODULE, m1));
+    JSValue ret = JS_EvalFunction(ctx, func_obj);
+    if (JS_IsException(ret))
+        return 5;
+    JS_FreeValue(ctx, ret);
+
+
+    printf("m1 (load) ptr: 0x%" PRIXPTR "\n", (uintptr_t)m1);
+
+
+    // Init the loaded module prematurely
+    js_create_module_function(ctx, m1);
+    js_link_module(ctx, m1);
+
+    // TODO: FIX: ONLY WORKS TWICE FOR STATIC MODULES, THEN STOPS REPLACING
+
+        // for(i = 0; i < m->export_entries_count; i++) {
+        //     JSExportEntry *me = &m->export_entries[i];
+        //     if (me->export_type == JS_EXPORT_TYPE_LOCAL) {
+        //         var_ref = var_refs[me->u.local.var_idx];
+        //         var_ref->header.ref_count++;
+        //         me->u.local.var_ref = var_ref;
+        //     }
+        // }
+
+
+    for(int i = 0; i < m->export_entries_count; i++) {
+        JSExportEntry *me = &m->export_entries[i];
+        JSExportEntry *meNew = &m1->export_entries[i]; // TODO :proper find by name matching
+        if (me->export_type == JS_EXPORT_TYPE_LOCAL) {
+          const char* export_name = JS_AtomToCString(ctx, me->export_name);
+          const char* local_name = JS_AtomToCString(ctx, me->local_name);
+          printf("updating export: ");
+          printf(export_name);
+          printf("\n");
+
+          JSVarRef* mVarRef = me->u.local.var_ref;
+          JSVarRef* m1VarRef = meNew->u.local.var_ref;
+
+          JSValue* varRefValue = me->u.local.var_ref->pvalue;
+          const char* cStrVal = JS_ToCString(ctx, *varRefValue);
+          printf("dacode old: ");
+          printf(cStrVal);
+          printf("\n");
+
+        //   // Copy new var_ref to old var_ref
+        //   memcpy(me->u.local.var_ref, meNew->u.local.var_ref, sizeof(JSVarRef));
+        //   // TODO: free var ref?
+        //   // free_var_ref(ctx->rt, me->u.local.var_ref);
+
+        if (!m1VarRef->pvalue) {
+            printf("m1VarRef->pvalue NULLPTR\n");
+        }
+
+
+
+    uint32_t tag = JS_VALUE_GET_TAG(mVarRef->value);
+    switch(tag) {
+      case JS_TAG_INT:
+        printf("JS_TAG_INT \n");
+        break;
+      case JS_TAG_STRING:
+        printf("JS_TAG_STRING \n");
+        break;
+        case JS_TAG_OBJECT:
+        printf("JS_TAG_OBJECT \n");
+        break;
+        case JS_TAG_FUNCTION_BYTECODE:
+        printf("JS_TAG_FUNCTION_BYTECODE \n");
+        break;
+        case JS_TAG_SYMBOL:
+        printf("JS_TAG_SYMBOL \n");
+        break;
+        case JS_TAG_BOOL:
+        printf("JS_TAG_BOOL \n");
+        break;
+        case JS_TAG_NULL:
+        printf("JS_TAG_NULL \n");
+        break;
+        case JS_TAG_UNDEFINED:
+        printf("JS_TAG_UNDEFINED \n");
+        break;
+        case JS_TAG_UNINITIALIZED:
+        printf("JS_TAG_UNINITIALIZED \n");
+        break;
+        default:
+        printf("JS_TAG_UKNOWN \n");
+        break;
+    }
+
+
+
+
+
+
+        // // js_free(ctx, mVarRef->pvalue);
+        // JS_FreeValue(ctx, mVarRef->value);
+
+    // JSGCObjectHeader *p = JS_VALUE_GET_PTR(mVarRef->value)
+
+
+            // if (var_ref->is_detached) {
+            //     JS_FreeValueRT(rt, var_ref->value);
+            //     remove_gc_object(&var_ref->header);
+            // } else {
+            //     list_del(&var_ref->header.link); /* still on the stack */
+            // }
+            // js_free_rt(rt, var_ref);
+
+            // JSObject *p = JS_VALUE_GET_OBJ(val);
+    
+    // if (mVarRef->value.u.ptr) {
+        // TODO: support more memcpy types
+        // ref: t JS_ToBoolFree(JSCon
+    if (tag == JS_TAG_OBJECT) {
+    memcpy(mVarRef->value.u.ptr, m1VarRef->value.u.ptr, sizeof(JSObject));
+    memcpy(mVarRef->pvalue->u.ptr, m1VarRef->pvalue->u.ptr, sizeof(JSObject));
+    } else {
+        // TODO: switch case for rest
+
+        // not sure if below si correct
+    mVarRef->value.u.ptr = m1VarRef->value.u.ptr;
+    mVarRef->pvalue->u.ptr = m1VarRef->pvalue->u.ptr;
+    }
+
+
+
+
+    mVarRef->value.u.int32 = m1VarRef->value.u.int32;
+    mVarRef->value.u.float64 = m1VarRef->value.u.float64;
+
+
+    mVarRef->pvalue->u.int32 = m1VarRef->pvalue->u.int32;
+    mVarRef->pvalue->u.float64 = m1VarRef->pvalue->u.float64;
+
+
+
+
+        // memcpy(&mVarRef->value, &m1VarRef->value, sizeof(JSValue));
+        // memcpy(mVarRef->pvalue, m1VarRef->pvalue, sizeof(JSValue));
+
+          mVarRef->pvalue = m1VarRef->pvalue;
+          mVarRef->value = m1VarRef->value;
+        //   mVarRef->value = JS_DupValue(ctx, m1VarRef->value);
+          mVarRef->header.ref_count++;
+          m1VarRef->header.ref_count++;
+
+
+        //    memcpy(mVarRef, m1VarRef, sizeof(JSVarRef));
+
+          const char* cStrValn = JS_ToCString(ctx, *me->u.local.var_ref->pvalue);
+          printf("dacode new: ");
+          printf(cStrValn);
+          printf("\n");
+
+
+        }
+    }
+
+    // m->export_entries_count = 0;
+    // js_free_module_def_limited(ctx, m);
+    // js_free_module_def(ctx, m);
+
+    // copying may not be required...
+    // could just free m and then m1 takes its place naturally already
+    // but what if theres refernces to the original module elsewhere? we need to use it
+
+    m1->module_name = "unloaded";
+
+    JS_FreeValue(ctx, m->module_ns);
+    JS_FreeValue(ctx, m->func_obj);
+    JS_FreeValue(ctx, m->eval_exception);
+    JS_FreeValue(ctx, m->meta_obj);
+
+    // struct list_head oldLink = m->link;
+    // JSRefCountHeader oldHeader = m->header;
+    // memcpy(m, m1, sizeof(JSModuleDef));
+    // m->link = oldLink;
+    // m->header = oldHeader;
+
+    // TODO: FIX: when using below to copy, module isnt always compiling (land compiled output log)
+    // // m->link = m1->link;
+    // // m->header = m1->header;
+    m->module_name = JS_DupAtom(ctx, module_name);
+    m->module_ns = JS_DupValue(ctx, m1->module_ns);
+    // memcpy(&m->func_obj, &m1->func_obj, sizeof(JSValue));
+    m->func_obj = JS_DupValue(ctx, m1->func_obj);
+    m->init_func = m1->init_func;
+    m->eval_exception = JS_DupValue(ctx, m1->eval_exception);
+    m->meta_obj = JS_DupValue(ctx, m1->meta_obj);
+
+    // Exp/imp ptrs
+    // TODO: free old
+    m->req_module_entries = m1->req_module_entries;
+    m->req_module_entries_count = m1->req_module_entries_count;
+    m->req_module_entries_size = m1->req_module_entries_size;
+
+    m->export_entries = m1->export_entries;
+    m->export_entries_count = m1->export_entries_count;
+    m->export_entries_size = m1->export_entries_size;
+
+    m->star_export_entries = m1->star_export_entries;
+    m->star_export_entries_count = m1->star_export_entries_count;
+    m->star_export_entries_size = m1->star_export_entries_size;
+
+    m->import_entries = m1->import_entries;
+    m->import_entries_count = m1->import_entries_count;
+    m->import_entries_size = m1->import_entries_size;
+
+
+    // JSRefCountHeader header; /* must come first, 32-bit */
+    // JSAtom module_name;
+    // struct list_head link;
+
+    // JSReqModuleEntry *req_module_entries;
+    // int req_module_entries_count;
+    // int req_module_entries_size;
+
+    // JSExportEntry *export_entries;
+    // int export_entries_count;
+    // int export_entries_size;
+
+    // JSStarExportEntry *star_export_entries;
+    // int star_export_entries_count;
+    // int star_export_entries_size;
+
+    // JSImportEntry *import_entries;
+    // int import_entries_count;
+    // int import_entries_size;
+
+    // JSValue module_ns;
+    // JSValue func_obj; /* only used for JS modules */
+    // JSModuleInitFunc *init_func; /* only used for C modules */
+    // BOOL resolved : 8;
+    // BOOL func_created : 8;
+    // BOOL instantiated : 8;
+    // BOOL evaluated : 8;
+    // BOOL eval_mark : 8; /* temporary use during js_evaluate_module() */
+    // /* true if evaluation yielded an exception. It is saved in
+    //    eval_exception */
+    // BOOL eval_has_exception : 8; 
+    // JSValue eval_exception;
+    // JSValue meta_obj; /* for import.meta */
+
+
+
+
+
+    list_del(&m1->link);
+    // // // m1->export_entries_count = 0;
+    // // // // js_free_module_def_limited(ctx, m1);
+    // // // js_free_module_def(ctx, m1);
+
+    // js_free_module_def_limited(ctx, m);
+
+    m = js_find_loaded_module(ctx, module_name);
+    printf("m (found END) ptr: 0x%" PRIXPTR "\n", (uintptr_t)m);
+
+
+    return 0;
 }

@@ -506,8 +506,12 @@ JSClassID JS_NewClassID(JSClassID *pclass_id);
 JSClassID JS_GetClassID(JSValueConst v);
 int JS_NewClass(JSRuntime *rt, JSClassID class_id, const JSClassDef *class_def);
 int JS_IsRegisteredClass(JSRuntime *rt, JSClassID class_id);
-
+int JS_ReloadModule(JSContext *ctx, const char *basename, const char *filename);
+int js_link_module(JSContext *ctx, void *m);
+int js_create_module_function(JSContext *ctx, void *mp);
 /* value handling */
+
+void free_var_ref(JSRuntime *rt, void *var_ref);
 
 static js_force_inline JSValue JS_NewBool(JSContext *ctx, JS_BOOL val)
 {

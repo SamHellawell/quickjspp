@@ -20,6 +20,7 @@
 #include <ios>
 #include <sstream>
 #include <filesystem>
+#include <iostream>
 
 
 #if defined(__cpp_rtti)
@@ -442,7 +443,7 @@ struct js_traits<std::variant<Ts...>>
 
             case JS_TAG_FUNCTION_BYTECODE:
                 return unwrapPriority<std::is_function>(ctx, v);
-            case JS_TAG_OBJECT:
+            case JS_TAG_OBJECT: // TODO: FIX: this does not account for inheritance!
                 if(auto result = unwrapObj<Ts...>(ctx, v, JS_GetClassID(v)))
                 {
                     return *result;
@@ -771,6 +772,7 @@ struct js_traits<ctor_wrapper<T, Args...>>
             if(JS_IsException(proto))
                 return proto;
             auto jsobj = JS_NewObjectProtoClass(ctx, proto, js_traits<std::shared_ptr<T>>::QJSClassId);
+
             JS_FreeValue(ctx, proto);
             if(JS_IsException(jsobj))
                 return jsobj;
@@ -779,6 +781,17 @@ struct js_traits<ctor_wrapper<T, Args...>>
             {
                 std::shared_ptr<T> ptr = std::apply(std::make_shared<T, Args...>, detail::unwrap_args<Args...>(ctx, argc, argv));
                 JS_SetOpaque(jsobj, new std::shared_ptr<T>(std::move(ptr)));
+
+                #ifdef DEUS_DEBUG
+                std::cout << "CONSTRUCT JS_NewObjectProtoClass\n";
+                #endif
+
+                // If memory is managed by external source
+                const bool isMemoryManaged = true; // TODO: define in class
+                if (isMemoryManaged) {
+                  JS_DupValue(ctx, jsobj);
+                }
+
                 return jsobj;
             }
             catch (exception)
