@@ -9,13 +9,13 @@ if(MSVC)
 
   message(VERBOSE "Compiling QuickJS with MSVC is not supported")
   message(VERBOSE "However we can download QuickJS DLL that was cross-compiled with MinGW-w64 by GH-action")
-  message(VERBOSE "https://nightly.link/ftk/quickjspp/workflows/quickjsdll/master/")
+  message(VERBOSE "https://nightly.link/SamHellawell/quickjspp/workflows/quickjsdll/master/")
   message(VERBOSE "If you don't want to download DLLs from the internet, see .github/workflows/quickjsdll.yml for instructions on how to compile it yourself")
 
   if(NOT EXISTS ${CMAKE_BINARY_DIR}/libquickjs${arch}.dll)
     cmake_minimum_required(VERSION 3.18)
     file(DOWNLOAD
-            "https://nightly.link/ftk/quickjspp/workflows/quickjsdll/ci/dlls%20-flto%20-O3%20-DNDEBUG.zip"
+            "https://nightly.link/SamHellawell/quickjspp/workflows/quickjsdll/ci/dlls%20-flto%20-O3%20-DNDEBUG.zip"
             libquickjs.zip
             TLS_VERIFY ON SHOW_PROGRESS)
     file(ARCHIVE_EXTRACT INPUT libquickjs.zip DESTINATION ${CMAKE_BINARY_DIR})
