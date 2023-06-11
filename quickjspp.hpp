@@ -921,7 +921,7 @@ struct js_traits<std::shared_ptr<T>>
                     assert(pptr);
                     const T * ptr = pptr->get();
                     assert(ptr);
-                    for(Value T::* member : markOffsets)
+                    for(auto&& member : markOffsets)
                     {
                         JS_MarkValue(rt, (*ptr.*member).v, mark_func);
                     }
@@ -944,6 +944,7 @@ struct js_traits<std::shared_ptr<T>>
             int e = JS_NewClass(rt, QJSClassId, &def);
             if(e < 0)
             {
+                JS_FreeValue(ctx, proto);
                 JS_ThrowInternalError(ctx, "Can't register class %s", name);
                 throw exception{ctx};
             }
@@ -1322,7 +1323,12 @@ public:
 
     bool operator ==(JSValueConst other) const
     {
-        return JS_VALUE_GET_TAG(v) == JS_VALUE_GET_TAG(other) && JS_VALUE_GET_PTR(v) == JS_VALUE_GET_PTR(other);
+        auto tag = JS_VALUE_GET_TAG(v);
+        if(tag != JS_VALUE_GET_TAG(other))
+            return false;
+        if(tag >= JS_TAG_INT && tag < JS_TAG_FLOAT64)
+            return JS_VALUE_GET_INT(v) == JS_VALUE_GET_INT(other);
+        return JS_VALUE_GET_PTR(v) == JS_VALUE_GET_PTR(other);
     }
 
     bool operator !=(JSValueConst other) const { return !((*this) == other); }
@@ -1740,10 +1746,14 @@ public:
                 return *this;
             }
 
-
-            ~class_registrar()
+            ~class_registrar() noexcept(false)
             {
-                context.registerClass<T>(name, std::move(prototype));
+                // register_class can throw, so check if an exception has already occurred
+                JSValue v = JS_GetException(context.ctx);
+                if(JS_IsNull(v))
+                    context.registerClass<T>(name, std::move(prototype));
+                else
+                    JS_Throw(context.ctx, v);
             }
         };
 
@@ -1903,7 +1913,7 @@ struct js_traits<std::function<R(Args...)>, int>
 {
     static auto unwrap(JSContext * ctx, JSValueConst fun_obj)
     {
-        const int argc = sizeof...(Args);
+        constexpr int argc = sizeof...(Args);
         if constexpr(argc == 0)
         {
             return [jsfun_obj = Value{ctx, JS_DupValue(ctx, fun_obj)}]() -> R {
