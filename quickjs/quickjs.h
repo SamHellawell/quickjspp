@@ -230,6 +230,7 @@ typedef struct JSValue {
 
 static inline JSValue __JS_NewFloat64(JSContext *ctx, double d)
 {
+    (void)ctx;
     JSValue v;
     v.tag = JS_TAG_FLOAT64;
     v.u.float64 = d;
