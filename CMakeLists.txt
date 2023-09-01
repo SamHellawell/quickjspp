@@ -7,9 +7,10 @@ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 add_subdirectory(quickjs)
 
 add_library(quickjspp INTERFACE)
-target_link_libraries(quickjspp INTERFACE quickjs)
+target_link_libraries(quickjspp INTERFACE quickjs mimalloc-static)
 target_compile_features(quickjspp INTERFACE cxx_std_20)
 target_include_directories(quickjspp INTERFACE .)
+target_include_directories(quickjspp INTERFACE ./quickjs/include)
 set_target_properties(quickjspp PROPERTIES PUBLIC_HEADER quickjspp.hpp)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -21,8 +22,8 @@ elseif(MSVC)
     add_compile_options(/EHsc) # enable exceptions
 endif()
 
-add_executable(qjs qjs.cpp)
-target_link_libraries(qjs quickjspp)
+add_executable(qjspp qjs.cpp)
+target_link_libraries(qjspp quickjspp)
 
 # cmake -DBUILD_TESTING=OFF to disable tests
 include(CTest)
@@ -30,4 +31,4 @@ if(BUILD_TESTING)
     add_subdirectory(test)
 endif()
 
-install(TARGETS quickjspp qjs)
+install(TARGETS quickjspp qjspp)
