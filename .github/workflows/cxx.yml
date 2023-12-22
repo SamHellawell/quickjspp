@@ -76,7 +76,7 @@ jobs:
             os: windows-2022
             cmake_opts: -T ClangCL -A Win32
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       with:
         submodules: recursive
     - name: preconfigure
@@ -93,7 +93,7 @@ jobs:
         ASAN_OPTIONS: strict_string_checks=1:detect_stack_use_after_return=1:check_initialization_order=1:strict_init_order=1
     - name: install
       run: cmake --install build_dir --prefix install_prefix --config ${{ matrix.build_type }}
-    - uses: actions/upload-artifact@v2
+    - uses: actions/upload-artifact@v3
       with:
         name: ${{ matrix.compiler }}
         path: install_prefix
@@ -115,10 +115,10 @@ jobs:
         shell: msys2 {0}
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       with:
         submodules: recursive
-    - uses: msys2/setup-msys2@v2
+    - uses: msys2/setup-msys2@v3
       with:
         msystem: MINGW64
         update: true
@@ -137,7 +137,7 @@ jobs:
         ASAN_OPTIONS: strict_string_checks=1:detect_stack_use_after_return=1:check_initialization_order=1:strict_init_order=1
     - name: install
       run: cmake --install build_dir --prefix install_prefix
-    - uses: actions/upload-artifact@v2
+    - uses: actions/upload-artifact@v3
       with:
         name: ${{ matrix.compiler }}-${{ matrix.build_type }}
         path: install_prefix

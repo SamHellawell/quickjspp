@@ -14,7 +14,7 @@ jobs:
         cflags: [ "-flto -O2 -DNDEBUG", "-flto -Os -DNDEBUG", "-flto -O3 -DNDEBUG", "-O3 -DNDEBUG", "-g -DDUMP_LEAKS=1" ]
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       with:
         submodules: recursive
     - name: install mingw
@@ -30,7 +30,7 @@ jobs:
         i686-w64-mingw32-gcc -shared -static quickjs/*.c bin/libquickjs.def -DCONFIG_VERSION=\"$(cat quickjs/VERSION)\" -DCONFIG_BIGNUM -D_GNU_SOURCE=1 -o bin/libquickjs32.dll  -Wl,--out-implib,bin/libquickjs32.a -pthread -s ${{ matrix.cflags }}
         x86_64-w64-mingw32-gcc -shared -static quickjs/*.c bin/libquickjs.def -DCONFIG_VERSION=\"$(cat quickjs/VERSION)\" -DCONFIG_BIGNUM -D_GNU_SOURCE=1 -o bin/libquickjs64.dll  -Wl,--out-implib,bin/libquickjs64.a -pthread -s ${{ matrix.cflags }}
       shell: bash
-    - uses: actions/upload-artifact@v2
+    - uses: actions/upload-artifact@v3
       with:
         name: dlls ${{matrix.cflags}}
         path: bin

@@ -15,7 +15,7 @@ if(MSVC)
   if(NOT EXISTS ${CMAKE_BINARY_DIR}/libquickjs${arch}.dll)
     cmake_minimum_required(VERSION 3.18)
     file(DOWNLOAD
-            "https://nightly.link/cykoder/quickjspp/workflows/quickjsdll/ci/dlls%20-flto%20-O3%20-DNDEBUG.zip"
+            "https://nightly.link/cykoder/quickjspp/workflows/quickjsdll/feat%2Fmodule-reload/dlls%20-flto%20-O3%20-DNDEBUG.zip"
             libquickjs.zip
             TLS_VERIFY ON SHOW_PROGRESS)
     file(ARCHIVE_EXTRACT INPUT libquickjs.zip DESTINATION ${CMAKE_BINARY_DIR})
