@@ -230,7 +230,6 @@ typedef struct JSValue {
 
 static inline JSValue __JS_NewFloat64(JSContext *ctx, double d)
 {
-    (void)ctx;
     JSValue v;
     v.tag = JS_TAG_FLOAT64;
     v.u.float64 = d;
@@ -314,6 +313,9 @@ static inline JS_BOOL JS_VALUE_IS_NAN(JSValue v)
 #define JS_EVAL_FLAG_COMPILE_ONLY (1 << 5)
 /* don't include the stack frames before this eval in the Error() backtraces */
 #define JS_EVAL_FLAG_BACKTRACE_BARRIER (1 << 6)
+/* allow top-level await in normal script. JS_Eval() returns a
+   promise. Only allowed with JS_EVAL_TYPE_GLOBAL */
+#define JS_EVAL_FLAG_ASYNC (1 << 7) 
 
 typedef JSValue JSCFunction(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
 typedef JSValue JSCFunctionMagic(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic);
@@ -508,11 +510,8 @@ JSClassID JS_GetClassID(JSValueConst v);
 int JS_NewClass(JSRuntime *rt, JSClassID class_id, const JSClassDef *class_def);
 int JS_IsRegisteredClass(JSRuntime *rt, JSClassID class_id);
 int JS_ReloadModule(JSContext *ctx, const char *basename, const char *filename);
-int js_link_module(JSContext *ctx, void *m);
-int js_create_module_function(JSContext *ctx, void *mp);
-/* value handling */
 
-void free_var_ref(JSRuntime *rt, void *var_ref);
+/* value handling */
 
 static js_force_inline JSValue JS_NewBool(JSContext *ctx, JS_BOOL val)
 {
@@ -843,7 +842,15 @@ typedef struct {
 void JS_SetSharedArrayBufferFunctions(JSRuntime *rt,
                                       const JSSharedArrayBufferFunctions *sf);
 
+typedef enum JSPromiseStateEnum {
+    JS_PROMISE_PENDING,
+    JS_PROMISE_FULFILLED,
+    JS_PROMISE_REJECTED,
+} JSPromiseStateEnum;
+
 JSValue JS_NewPromiseCapability(JSContext *ctx, JSValue *resolving_funcs);
+JSPromiseStateEnum JS_PromiseState(JSContext *ctx, JSValue promise);
+JSValue JS_PromiseResult(JSContext *ctx, JSValue promise);
 
 /* is_handled = TRUE means that the rejection is handled */
 typedef void JSHostPromiseRejectionTracker(JSContext *ctx, JSValueConst promise,
@@ -915,8 +922,8 @@ int JS_ResolveModule(JSContext *ctx, JSValueConst obj);
 /* only exported for os.Worker() */
 JSAtom JS_GetScriptOrModuleName(JSContext *ctx, int n_stack_levels);
 /* only exported for os.Worker() */
-JSModuleDef *JS_RunModule(JSContext *ctx, const char *basename,
-                          const char *filename);
+JSValue JS_LoadModule(JSContext *ctx, const char *basename,
+                      const char *filename);
 
 /* C function definition */
 typedef enum JSCFunctionEnum {  /* XXX: should rename for namespace isolation */
